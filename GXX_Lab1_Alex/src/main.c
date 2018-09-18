@@ -89,7 +89,7 @@ int main() {
 	
 	int i;
 
-	// LOOP TO FIND MAX
+	// LOOP TO FIND DOT PRODUCT
 	for(i=0 ; i<1000 ; i++) {
 		dot_product += f1000_array[i] * g1000_array[i];
 	}

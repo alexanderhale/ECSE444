@@ -12,49 +12,47 @@ ARM Macro Assembler    Page 1
                                                             n in C
     4 00000000         asm_dot
     5 00000000         
-    6 00000000 B430            PUSH{R4,         R5}         ; saving context ac
+    6 00000000 B47E            PUSH{R1-R6}                  ; saving context ac
                                                             cording to calling 
                                                             convention
-    7 00000002         
-    8 00000002         loop
-    9 00000002 1E52            SUBS             R2, R2, #1  ; loop counter (N =
-                                                             N-1)
-   10 00000004 DB0C            BLT              done        ; loop has finished
+    7 00000002 F04F 36FF       MOV              R6, #-1     ; initialize loop c
+                                                            ounter
+    8 00000006         
+    9 00000006         loop
+   10 00000006 F106 0601       ADD              R6, R6, #1  ; loop counter (N =
+                                                             N+1)
+   11 0000000A 4296            CMP              R6, R2
+   12 0000000C DC0A            BGT              done        ; loop has finished
                                                             ?
-   11 00000006 EB00 0482       ADD              R4, R0, R2, LSL #2 ; creating b
+   13 0000000E EB00 0486       ADD              R4, R0, R6, LSL #2 ; creating b
                                                             ase address for the
                                                              next element in th
                                                             e first array
-   12 0000000A EB01 0582       ADD              R5, R1, R2, LSL #2 ; creating b
+   14 00000012 EB01 0586       ADD              R5, R1, R6, LSL #2 ; creating b
                                                             ase address for the
                                                              next element in th
                                                             e second array
-   13 0000000E ED94 0A00       VLDR.f32         S0, [R4]    ; load next element
+   15 00000016 ED94 0A00       VLDR.f32         S0, [R4]    ; load next element
                                                              of first array int
                                                             o S0
-   14 00000012 EDD5 0A00       VLDR.f32         S1, [R5]    ; load next element
+   16 0000001A EDD5 0A00       VLDR.f32         S1, [R5]    ; load next element
                                                              of second array in
                                                             to S1
-   15 00000016 EE00 1A20       VMLA.f32         S2, S0, S1  ; dot product += S0
+   17 0000001E EE00 1A20       VMLA.f32         S2, S0, S1  ; dot product += S0
                                                             *S1
-   16 0000001A EEF1 FA10       VMRS             APSR_nzcv, FPSCR ; need to move
-                                                             the FPU status reg
-                                                            ister to achive flo
-                                                            ating point conditi
-                                                            onal execution
-   17 0000001E E7F0            B                loop        ; loop
-   18 00000020         
-   19 00000020         done
-   20 00000020 ED83 1A00       VSTR.f32         S2, [R3]    ; store the dot pro
+   18 00000022 E7F0            B                loop        ; loop
+   19 00000024         
+   20 00000024         done
+   21 00000024 ED83 1A00       VSTR.f32         S2, [R3]    ; store the dot pro
                                                             duct in the pointer
                                                              (float *a_dot_prod
                                                             uct) that was provi
                                                             ded
-   21 00000024         
-   22 00000024 BC30            POP{R4,          R5}         ; restore context
-   23 00000026 4770            BX               LR          ; return
-   24 00000028         
-   25 00000028                 END
+   22 00000028         
+   23 00000028 BC7E            POP{R1-R6}                   ; restore context
+   24 0000002A 4770            BX               LR          ; return
+   25 0000002C         
+   26 0000002C                 END
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp --apcs=int
 erwork --depend=.\objects\asm_dot.d -o.\objects\asm_dot.o -I.\RTE\_GXX_Lab1 -IC
 :\Keil_v5\ARM\PACK\ARM\CMSIS\5.4.0\CMSIS\Core\Include -IC:\Keil_v5\ARM\PACK\ARM
@@ -76,21 +74,21 @@ Symbol: asm_dot
    Uses
       At line 3 in file asm\asm_dot.s
 Comment: asm_dot used once
-done 00000020
+done 00000024
 
 Symbol: done
    Definitions
-      At line 19 in file asm\asm_dot.s
+      At line 20 in file asm\asm_dot.s
    Uses
-      At line 10 in file asm\asm_dot.s
+      At line 12 in file asm\asm_dot.s
 Comment: done used once
-loop 00000002
+loop 00000006
 
 Symbol: loop
    Definitions
-      At line 8 in file asm\asm_dot.s
+      At line 9 in file asm\asm_dot.s
    Uses
-      At line 17 in file asm\asm_dot.s
+      At line 18 in file asm\asm_dot.s
 Comment: loop used once
 test 00000000
 

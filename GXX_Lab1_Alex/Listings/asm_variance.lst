@@ -12,90 +12,82 @@ ARM Macro Assembler    Page 1
                                                             on in C
     4 00000000         asm_variance
     5 00000000         
-    6 00000000 B430            PUSH             {R4, R5}    ; saving context ac
+    6 00000000 B43E            PUSH             {R1-R5}     ; saving context ac
                                                             cording to calling 
                                                             convention
-    7 00000002 B402            PUSH             {R1}        ; save to refresh t
-                                                            he loop counter
-    8 00000004         
-    9 00000004         loop_one
-   10 00000004 1E49            SUBS             R1, R1, #1  ; loop counter (N =
-                                                             N-1)
-   11 00000006 DB08            BLT              out         ; loop has finished
+    7 00000002 EE01 1A90       VMOV.f32         S3, R1      ; load length of ar
+                                                            ray into floating p
+                                                            oint form
+    8 00000006 F04F 35FF       MOV              R5, #-1     ; initialize loop c
+                                                            ounter
+    9 0000000A         
+   10 0000000A         loop_one
+   11 0000000A F105 0501       ADD              R5, R5, #1  ; loop counter (N =
+                                                             N+1)
+   12 0000000E 428D            CMP              R5, R1
+   13 00000010 DC06            BGT              out         ; loop has finished
                                                             ?
-   12 00000008 EB00 0481       ADD              R4, R0, R1, LSL #2 ; creating b
+   14 00000012 EB00 0485       ADD              R4, R0, R5, LSL #2 ; creating b
                                                             ase address for the
                                                              next element in th
                                                             e array
-   13 0000000C EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
+   15 00000016 EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
                                                              of array into S1
-   14 00000010 EE30 0A20       VADD.f32         S0, S0, S1  ; add array element
+   16 0000001A EE30 0A20       VADD.f32         S0, S0, S1  ; add array element
                                                              to the running tot
                                                             al (stored in S0)
-   15 00000014 EEF1 FA10       VMRS             APSR_nzcv, FPSCR ; need to move
-                                                             the FPU status reg
-                                                            ister to achive flo
-                                                            ating point conditi
-                                                            onal execution
-   16 00000018 E7F4            B                loop_one    ; loop
-   17 0000001A         
-   18 0000001A         out
-   19 0000001A BC02            POP              {R1}        ; refresh loop coun
+   17 0000001E E7F4            B                loop_one    ; loop
+   18 00000020         
+   19 00000020         out
+   20 00000020 F04F 36FF       MOV              R6, #-1     ; refresh loop coun
                                                             ter
-   20 0000001C EE01 1A90       VMOV.f32         S3, R1      ; load length of ar
-                                                            ray into floating p
-                                                            oint form
-   21 00000020 B402            PUSH             {R1}
-   22 00000022 EE80 0A21       VDIV.f32         S0, S3      ; divide total by n
+   21 00000024 EE80 0A21       VDIV.f32         S0, S3      ; divide total by n
                                                             umber of elements t
                                                             o get the average, 
                                                             stored in S0
-   23 00000026         
-   24 00000026         loop_two
-   25 00000026 1E49            SUBS             R1, R1, #1  ; loop counter (N =
-                                                             N-1)
-   26 00000028 DB08            BLT              out_two     ; loop has finished
+   22 00000028         
+   23 00000028         loop_two
+   24 00000028 F105 0501       ADD              R5, R5, #1  ; loop counter (N =
+                                                             N+1)
+   25 0000002C 428D            CMP              R5, R1
+   26 0000002E DC08            BGT              out_two     ; loop has finished
                                                             ?
-   27 0000002A EB00 0481       ADD              R4, R0, R1, LSL #2 ; creating b
+   27 00000030 EB00 0485       ADD              R4, R0, R5, LSL #2 ; creating b
                                                             ase address for the
                                                              next element in th
                                                             e array
-   28 0000002E EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
+   28 00000034 EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
                                                              of array into S1
-   29 00000032 EE70 0AC0       VSUB.f32         S1, S1, S0  ; array element - a
+   29 00000038 EE70 0AC0       VSUB.f32         S1, S1, S0  ; array element - a
+                                                            verage
+   30 0000003C EE00 1AA0       VMLA.f32         S2, S1, S1  ; variance += (arra
+                                                            y element - average
+                                                            )^2  (variance stor
 
 
 
 ARM Macro Assembler    Page 2 
 
 
-                                                            verage
-   30 00000036 EE00 1AA0       VMLA.f32         S2, S1, S1  ; variance += (arra
-                                                            y element - average
-                                                            )^2  (variance stor
                                                             ed in S2)
-   31 0000003A E7F4            B                loop_two    ; loop
-   32 0000003C         
-   33 0000003C         out_two
-   34 0000003C BC02            POP              {R1}
-   35 0000003E EE01 1A90       VMOV.f32         S3, R1      ; load length of ar
-                                                            ray into floating p
-                                                            oint form
-   36 00000042 EE81 1A21       VDIV.f32         S2, S3      ; divide accumulate
+   31 00000040 E7F2            B                loop_two    ; loop
+   32 00000042         
+   33 00000042         out_two
+   34 00000042 EE81 1A21       VDIV.f32         S2, S3      ; divide accumulate
                                                             d value by number o
                                                             f elements to get t
                                                             he variance, stored
                                                              in S2
-   37 00000046 ED82 1A00       VSTR.f32         S2, [R2]    ; store the dot pro
+   35 00000046 ED82 1A00       VSTR.f32         S2, [R2]    ; store the dot pro
                                                             duct in the pointer
                                                              (float *a_variance
                                                             ) that was provided
                                                             
-   38 0000004A         
-   39 0000004A BC30            POP              {R4, R5}    ; restore context
-   40 0000004C 4770            BX               LR          ; return
-   41 0000004E         
-   42 0000004E                 END
+   36 0000004A         
+   37 0000004A BC3E            POP              {R1-R5}     ; restore context
+   38 0000004C 4770            BX               LR          ; return
+   39 0000004E         
+   40 0000004E                 END
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp --apcs=int
 erwork --depend=.\objects\asm_variance.d -o.\objects\asm_variance.o -I.\RTE\_GX
 X_Lab1 -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\5.4.0\CMSIS\Core\Include -IC:\Keil_v5\AR
@@ -117,31 +109,31 @@ Symbol: asm_variance
    Uses
       At line 3 in file asm\asm_variance.s
 Comment: asm_variance used once
-loop_one 00000004
+loop_one 0000000A
 
 Symbol: loop_one
    Definitions
-      At line 9 in file asm\asm_variance.s
+      At line 10 in file asm\asm_variance.s
    Uses
-      At line 16 in file asm\asm_variance.s
+      At line 17 in file asm\asm_variance.s
 Comment: loop_one used once
-loop_two 00000026
+loop_two 00000028
 
 Symbol: loop_two
    Definitions
-      At line 24 in file asm\asm_variance.s
+      At line 23 in file asm\asm_variance.s
    Uses
       At line 31 in file asm\asm_variance.s
 Comment: loop_two used once
-out 0000001A
+out 00000020
 
 Symbol: out
    Definitions
-      At line 18 in file asm\asm_variance.s
+      At line 19 in file asm\asm_variance.s
    Uses
-      At line 11 in file asm\asm_variance.s
+      At line 13 in file asm\asm_variance.s
 Comment: out used once
-out_two 0000003C
+out_two 00000042
 
 Symbol: out_two
    Definitions
