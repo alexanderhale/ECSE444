@@ -1,0 +1,10 @@
+Math for Lab 1 Demo
+Dot Product:
+- C execution time: 		0.00166717s
+- ASM execution time:		0.00125200s
+- Library execution time: 	0.00071150s
+
+Variance:
+- C execution time: 		
+- ASM execution time:		
+- Library execution time: 	

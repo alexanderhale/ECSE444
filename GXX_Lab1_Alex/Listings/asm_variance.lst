@@ -1,0 +1,161 @@
+
+
+
+ARM Macro Assembler    Page 1 
+
+
+    1 00000000                 AREA             test, CODE, READONLY
+    2 00000000         
+    3 00000000                 export           asm_variance ; label must be ex
+                                                            ported if it is to 
+                                                            be used as a functi
+                                                            on in C
+    4 00000000         asm_variance
+    5 00000000         
+    6 00000000 B430            PUSH             {R4, R5}    ; saving context ac
+                                                            cording to calling 
+                                                            convention
+    7 00000002 B402            PUSH             {R1}        ; save to refresh t
+                                                            he loop counter
+    8 00000004         
+    9 00000004         loop_one
+   10 00000004 1E49            SUBS             R1, R1, #1  ; loop counter (N =
+                                                             N-1)
+   11 00000006 DB08            BLT              out         ; loop has finished
+                                                            ?
+   12 00000008 EB00 0481       ADD              R4, R0, R1, LSL #2 ; creating b
+                                                            ase address for the
+                                                             next element in th
+                                                            e array
+   13 0000000C EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
+                                                             of array into S1
+   14 00000010 EE30 0A20       VADD.f32         S0, S0, S1  ; add array element
+                                                             to the running tot
+                                                            al (stored in S0)
+   15 00000014 EEF1 FA10       VMRS             APSR_nzcv, FPSCR ; need to move
+                                                             the FPU status reg
+                                                            ister to achive flo
+                                                            ating point conditi
+                                                            onal execution
+   16 00000018 E7F4            B                loop_one    ; loop
+   17 0000001A         
+   18 0000001A         out
+   19 0000001A BC02            POP              {R1}        ; refresh loop coun
+                                                            ter
+   20 0000001C EE01 1A90       VMOV.f32         S3, R1      ; load length of ar
+                                                            ray into floating p
+                                                            oint form
+   21 00000020 B402            PUSH             {R1}
+   22 00000022 EE80 0A21       VDIV.f32         S0, S3      ; divide total by n
+                                                            umber of elements t
+                                                            o get the average, 
+                                                            stored in S0
+   23 00000026         
+   24 00000026         loop_two
+   25 00000026 1E49            SUBS             R1, R1, #1  ; loop counter (N =
+                                                             N-1)
+   26 00000028 DB08            BLT              out_two     ; loop has finished
+                                                            ?
+   27 0000002A EB00 0481       ADD              R4, R0, R1, LSL #2 ; creating b
+                                                            ase address for the
+                                                             next element in th
+                                                            e array
+   28 0000002E EDD4 0A00       VLDR.f32         S1, [R4]    ; load next element
+                                                             of array into S1
+   29 00000032 EE70 0AC0       VSUB.f32         S1, S1, S0  ; array element - a
+
+
+
+ARM Macro Assembler    Page 2 
+
+
+                                                            verage
+   30 00000036 EE00 1AA0       VMLA.f32         S2, S1, S1  ; variance += (arra
+                                                            y element - average
+                                                            )^2  (variance stor
+                                                            ed in S2)
+   31 0000003A E7F4            B                loop_two    ; loop
+   32 0000003C         
+   33 0000003C         out_two
+   34 0000003C BC02            POP              {R1}
+   35 0000003E EE01 1A90       VMOV.f32         S3, R1      ; load length of ar
+                                                            ray into floating p
+                                                            oint form
+   36 00000042 EE81 1A21       VDIV.f32         S2, S3      ; divide accumulate
+                                                            d value by number o
+                                                            f elements to get t
+                                                            he variance, stored
+                                                             in S2
+   37 00000046 ED82 1A00       VSTR.f32         S2, [R2]    ; store the dot pro
+                                                            duct in the pointer
+                                                             (float *a_variance
+                                                            ) that was provided
+                                                            
+   38 0000004A         
+   39 0000004A BC30            POP              {R4, R5}    ; restore context
+   40 0000004C 4770            BX               LR          ; return
+   41 0000004E         
+   42 0000004E                 END
+Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp --apcs=int
+erwork --depend=.\objects\asm_variance.d -o.\objects\asm_variance.o -I.\RTE\_GX
+X_Lab1 -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\5.4.0\CMSIS\Core\Include -IC:\Keil_v5\AR
+M\PACK\ARM\CMSIS\5.4.0\CMSIS\DSP\Include -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\5.4.0\
+Device\ARM\ARMCM4\Include --predefine="__EVAL SETA 1" --predefine="__UVISION_VE
+RSION SETA 526" --predefine="_RTE_ SETA 1" --predefine="ARMCM4_FP SETA 1" --lis
+t=.\listings\asm_variance.lst asm\asm_variance.s
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+asm_variance 00000000
+
+Symbol: asm_variance
+   Definitions
+      At line 4 in file asm\asm_variance.s
+   Uses
+      At line 3 in file asm\asm_variance.s
+Comment: asm_variance used once
+loop_one 00000004
+
+Symbol: loop_one
+   Definitions
+      At line 9 in file asm\asm_variance.s
+   Uses
+      At line 16 in file asm\asm_variance.s
+Comment: loop_one used once
+loop_two 00000026
+
+Symbol: loop_two
+   Definitions
+      At line 24 in file asm\asm_variance.s
+   Uses
+      At line 31 in file asm\asm_variance.s
+Comment: loop_two used once
+out 0000001A
+
+Symbol: out
+   Definitions
+      At line 18 in file asm\asm_variance.s
+   Uses
+      At line 11 in file asm\asm_variance.s
+Comment: out used once
+out_two 0000003C
+
+Symbol: out_two
+   Definitions
+      At line 33 in file asm\asm_variance.s
+   Uses
+      At line 26 in file asm\asm_variance.s
+Comment: out_two used once
+test 00000000
+
+Symbol: test
+   Definitions
+      At line 1 in file asm\asm_variance.s
+   Uses
+      None
+Comment: test unused
+6 symbols
+341 symbols in table
