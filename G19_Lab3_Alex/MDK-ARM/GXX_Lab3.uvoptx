@@ -152,52 +152,75 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>29</LineNumber>
+          <LineNumber>690</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134226730</Address>
+          <Address>134220060</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>../Src/main.c</Filename>
+          <Filename>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\GXX_Lab3\../Src/main.c\29</Expression>
+          <Expression>\\GXX_Lab3\../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c\690</Expression>
         </Bp>
         <Bp>
           <Number>1</Number>
           <Type>0</Type>
-          <LineNumber>48</LineNumber>
+          <LineNumber>533</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134226766</Address>
+          <Address>134220036</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>../Src/main.c</Filename>
+          <Filename>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\GXX_Lab3\../Src/main.c\48</Expression>
+          <Expression>\\GXX_Lab3\../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c\533</Expression>
         </Bp>
         <Bp>
           <Number>2</Number>
           <Type>0</Type>
-          <LineNumber>26</LineNumber>
+          <LineNumber>686</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134226722</Address>
+          <Address>134220058</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>../Src/main.c</Filename>
+          <Filename>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\GXX_Lab3\../Src/main.c\26</Expression>
+          <Expression>\\GXX_Lab3\../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c\686</Expression>
+        </Bp>
+        <Bp>
+          <Number>3</Number>
+          <Type>0</Type>
+          <LineNumber>540</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>134220038</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression>\\GXX_Lab3\../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_adc.c\540</Expression>
         </Bp>
       </Breakpoint>
+      <WatchWindow1>
+        <Ww>
+          <count>0</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>newTemp</ItemText>
+        </Ww>
+      </WatchWindow1>
       <Tracepoint>
         <THDelay>0</THDelay>
       </Tracepoint>

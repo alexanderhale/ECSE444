@@ -8,23 +8,27 @@ int systick_flag;
 
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC1_ADC_Init(void);
 static void MX_USART1_UART_Init(void);
 int UART_Print_String(UART_HandleTypeDef* uart_handle, char* stream, int length);
+int newTemp;
 
 int main(void)
 {
 	char temp[20] = {'T','e','m','p','e','r','a','t','u','r','e',':',' ','=',' ','3','0',' ','C','\n'};
-	
+	// char tempBuffer[30] = {' ',' ','\n',' ',' ','\n',' ',' ','\n',' ',' ','\n', ' ', ' ','\n',' ',' ','\n',' ',' ', '\n', ' ', ' ', '\n',
+	//	+ ' ', ' ', '\n', ' ', ' ', '\n'};
+		
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
   /* Configure the system clock */
   SystemClock_Config();
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+	MX_DMA_Init();
   MX_USART1_UART_Init();
 	MX_ADC1_ADC_Init();
-	int newTemp;
 	systick_flag = 0;		// initialize flag
 	HAL_ADC_Start(&hadc1);
 
@@ -35,7 +39,7 @@ int main(void)
 			// need to look those up in the manuals to see how to use them
 			// transmit once per loop? Or transmit the entire waiting array each loop?
 		
-		
+		/* START WEEK 1 */
 		HAL_Delay(100);
 		// HAL_UART_Transmit(&huart1, (uint8_t *)&ch[0], 5, 30000);
 			// TODO make sure this is in polling mode when reading the ADC value
@@ -44,7 +48,8 @@ int main(void)
 		newTemp = HAL_ADC_GetValue(&hadc1);
 		
 		// TODO make sure the newTemp is a reasonable value using debugger
-		// TODO put newTemp into the char array
+		
+		// put newTemp into the char array
 		if (newTemp < 10) {
 			temp[15] = '0';
 			temp[16] = (char) newTemp;
@@ -54,20 +59,38 @@ int main(void)
 		}
 		
 		UART_Print_String(&huart1, &temp[0], 5);
+		/* END WEEK 1 */
 
+		/* START WEEK 2
 		if (systick_flag == 1) {
 			systick_flag = 0;
 			
 			// TODO perform temperature reading and UART display
 				// TODO also figure out how this flag ever gets set to 1, because right now it doesn't
+			
+			newTemp = HAL_ADC_GetValue(&hadc1);
+		
+			// TODO make sure the newTemp is a reasonable value using debugger
+			
+			// put newTemp into the char array
+			if (newTemp < 10) {
+				temp[15] = '0';
+				temp[16] = (char) newTemp;
+			} else {
+				temp[15] = (char) newTemp / 10;
+				temp[16] = (char) newTemp % 10;
+			}
+			
+			UART_Print_String(&huart1, &temp[0], 5);
 		}
+		END WEEK 2 */
   }
 }
 
 int UART_Print_String(UART_HandleTypeDef* uart_handle, char* stream, int length) {
 	int i;
 	for (i = 0; i < length; i++) {
-		if (!HAL_UART_Transmit(uart_handle, (uint8_t *)&stream[i], 5, 30000)) {			// iteratively transmit the supplied array
+		if (!HAL_UART_Transmit_DMA(uart_handle, (uint8_t *)&stream, 5)) {			// iteratively transmit the supplied array
 			return 0;
 		}
 	}
@@ -174,35 +197,73 @@ static void MX_GPIO_Init(void)
 /* ADC init function */
 static void MX_ADC1_ADC_Init(void)
 {
-  HAL_ADC_DeInit(&hadc1);
+
+  ADC_MultiModeTypeDef multimode;
+  ADC_ChannelConfTypeDef sConfig;
+	__HAL_RCC_ADC_CLK_ENABLE();
 	
-	hadc1.Instance = ADC1;
-	hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;							// lower than AHB clock frequency divided by 3 (since resolution is 8)
-  hadc1.Init.Resolution = ADC_RESOLUTION_8B;		//
-	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;	
-	hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-	hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-	hadc1.Init.LowPowerAutoWait = ENABLE;					// 
-	hadc1.Init.ContinuousConvMode = DISABLE;
-	hadc1.Init.NbrOfConversion = 1;
-	hadc1.Init.DiscontinuousConvMode = DISABLE;
-	hadc1.Init.NbrOfDiscConversion = 1;
-	hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-	hadc1.Init.DMAContinuousRequests = DISABLE;
-	hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-	hadc1.Init.OversamplingMode = DISABLE;
-	// hadc1.Init.Oversampling = ;
-	// hadc1.Init.DFSDMConfig = ADC_DFSDM_MODE_DISABLE;
-	
-	HAL_StatusTypeDef test = HAL_ADC_Init(&hadc1);
-	
-  if (test != HAL_OK)
+    /**Common config 
+    */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc1.Init.Resolution = ADC_RESOLUTION_8B;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
+
+    /**Configure the ADC multi-mode 
+    */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+    /**Configure Regular Channel 
+    */
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
 }
 
+/** 
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void) 
+{
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+
+}
 
 void _Error_Handler(char *file, int line)
 {
