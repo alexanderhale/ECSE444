@@ -69,18 +69,23 @@ UART_HandleTypeDef huart1;
 osThreadId outputTaskHandle;
 osThreadId fastICATaskHandle;
 
+osMutexId mutexID;						// ID for the mutex for the threads
+
+// TODO figure out if needed for deliverable 2?
+uint32_t  inputExec;						// argument for the timer call back function
+osTimerId inputTimer;					// id for the button timer
+
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 int tim3_flag = 0;
+int inputTimerExpiredFlag = 0;				// when 1, the next value can be output
 
 float f_1 = 261.63;			// C_4
 float f_2 = 392;				// G_4
-float32_t a_data[4] = {1, 2, 3, 4};				// TODO tweak these
+float32_t a_data[4] = {1, 2, 3, 4};				// TODO tweak these if necessary
 arm_matrix_instance_f32 a = {2, 2, a_data};
 arm_matrix_instance_f32 x;								// global for first deliverable
 int sampling_frequency = 16000;
-int s_1[32000];
-int s_2[32000];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -90,7 +95,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_DFSDM1_Init(void);
 static void MX_DAC1_Init(void);
 void OutputTask(void const * argument);
-void FastICATask(void const * argument);
+// void FastICATask(void const * argument);
 
 int32_t l_data, r_data;
 uint32_t l_channel=1, r_channel=2;
@@ -110,6 +115,10 @@ int fgetc(FILE *f) {
   uint8_t ch = 0;
   while (HAL_OK != HAL_UART_Receive(&huart1, (uint8_t *)&ch, 1, 30000));
   return ch;
+}
+
+void InputTimer_Callback  (void const *arg) {		// timer callback function
+	inputTimerExpiredFlag = 1;
 }
 
 void GPIO_Init() {
@@ -183,7 +192,8 @@ int main(void)
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+  osMutexDef(Mutex1);
+	mutexID = osMutexCreate(osMutex(Mutex1));
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -199,25 +209,17 @@ int main(void)
   osThreadDef(outputTask, OutputTask, osPriorityNormal, 0, 128);
   outputTaskHandle = osThreadCreate(osThread(outputTask), NULL);
 	
-	osThreadDef(fastICATask, FastICATask, osPriorityNormal, 0, 128);
-  fastICATaskHandle = osThreadCreate(osThread(fastICATask), NULL);
+	// osThreadDef(fastICATask, FastICATask, osPriorityNormal, 0, 128);
+  // fastICATaskHandle = osThreadCreate(osThread(fastICATask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  osTimerDef(Input, InputTimer_Callback);
+	inputTimer = osTimerCreate(osTimer(Input), osTimerPeriodic, &inputExec);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
-	
-	
-	// TODO put this in the proper location
-	// fill sine wave arrays with their values
-	int i;
-	for (i = 0; i < 32000; i++) {
-		s_1[i] = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
-		s_2[i] = arm_sin_f32((2* PI * f_2 * i) / sampling_frequency);
-	}
 
   /* Start scheduler */
   osKernelStart();
@@ -469,83 +471,111 @@ void OutputTask(void const * argument)
 
   /* USER CODE BEGIN 5 */
 	int i = 0;
+	int s_1;
+	int s_2;
+	
+	osTimerStart(inputTimer, 1/sampling_frequency);		// start the hold timer from x seconds (timeout period = sampling frequency)
+		// TODO figure out how to set the timeout lower than 1 ms (because 1/16000 < 1 ms)
   /* Infinite loop */
   for(;;)
   {
-		// TODO use timer interrupts to send the values at the appropriate frequency
-			// set timeout period = sampling frequency
-		
-		// TODO scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
-		
-		// TODO provide DC offset to signal
-			// lowst value you can write to the DAC is 0, whereas a sine wave has negative samples
-			// need to put centre of sine wave (i.e. sine_1[i] == 0) at the centre of the DAC range
-		
-		// calculate mixed values
-		float32_t s_data[2];
-		s_data[0] = s_1[i];
-		s_data[1] = s_2[i];
-		arm_matrix_instance_f32 s_i = {1, 2, s_data};
-		arm_mat_mult_f32(&a, &s_i, &x);
-		
-		// send to DAC
-    HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
-		
-		i++;
-		if (i >= 32000) {
-			i = 0;
+		if (inputTimerExpiredFlag == 1) {
+			inputTimerExpiredFlag = 0;
+			
+			// calculate sine wave values
+			s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
+			s_2 = arm_sin_f32((2* PI * f_2 * i) / sampling_frequency);
+			
+			// scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
+				// TODO figure out the logic behind this line? Not really sure why it's here
+			s_1 = (s_1 + 1) * 2048;
+			s_2 = (s_2 + 1) * 2048;
+			
+			// provide DC offset to signal
+				// lowest value you can write to the DAC is 0, whereas a sine wave has negative samples
+				// need to put centre of sine wave (i.e. sine_1[i] == 0) at the centre of the DAC range
+				// range is 2^12 = 4096, so shift up by 2048 bits
+			s_1 = s_1 + 2048;
+			s_2 = s_2 + 2048;
+			
+			// osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
+				// not needed till deliverable 2
+			
+			// calculate mixed values
+			float32_t s_data[2];
+			s_data[0] = s_1;
+			s_data[1] = s_2;
+			arm_matrix_instance_f32 s_i = {1, 2, s_data};
+			arm_mat_mult_f32(&a, &s_i, &x);
+			
+			// send to DAC
+			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
+			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
+			
+			i++;
+			if (i >= 32000) {
+				i = 0;
+			}
+			
+			// osMutexRelease(mutexID);		// not needed till deliverable 2
 		}
   }
   /* USER CODE END 5 */ 
 }
 
-/* OutputTask function */
-void FastICATask(void const * argument)
-{
-  /* USER CODE BEGIN 5 */
-	
-  /* Infinite loop */
-  for(;;)
-  {
-		// TODO get the data
-			// the data will come from the microphones for the second demo
-		/*while (HAL_DFSDM_FilterPollForRegConversion(&hdfsdm1_filter0, 30000) != HAL_OK) {
-				// TODO replace this inefficient polling with interrupts
-		}
-		l_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &l_channel);
-		r_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &r_channel); */
-		
-		// for the first demo, get the data from the DAC pins using an ADC
-		l_data = x.pData[0];
-		r_data = x.pData[1];
-		
-		// centre the data: subtract the mean from each element
-		float mean[1];
-		mean[0]	= (l_data + r_data) / 2;
-		arm_matrix_instance_f32 result;
-		result.pData[0] = l_data - mean[0];
-		result.pData[1] = r_data - mean[0];
-		
-		// TODO whiten the data: 
-		
-		// TODO find the mixing matrix
-		arm_matrix_instance_f32 a_found;
-		
-		// un-center the resulting matrix
-		arm_matrix_instance_f32 s_mean;
-		arm_matrix_instance_f32 mean_matrix = {1, 1, mean};
-		arm_mat_inverse_f32(&a_found, &a_found);							// TODO make sure we don't need these A values anywhere
-		arm_mat_mult_f32(&a_found, &mean_matrix, &s_mean);
-		arm_mat_add_f32(&s_mean, &result, &result);
-		
-		// send result to DAC
-			// TODO change DAC bits if necessary
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, result.pData[0]);
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, result.pData[1]);
-  }
-  /* USER CODE END 5 */ 
-}
+/* FastICATask function */
+		// this will only be required for the second deliverable (I think)
+//void FastICATask(void const * argument)
+//{
+//  /* USER CODE BEGIN 5 */
+//	
+//  /* Infinite loop */
+//  for(;;)
+//  {
+//		osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
+//		
+//		// TODO get the data
+//			// the data will come from the microphones for the second demo
+//		/*while (HAL_DFSDM_FilterPollForRegConversion(&hdfsdm1_filter0, 30000) != HAL_OK) {
+//				// TODO replace this inefficient polling with interrupts
+//		}
+//		l_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &l_channel);
+//		r_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &r_channel); */
+//		
+//		// for the first demo, get the data from the DAC pins using an ADC
+//			// TODO here I just pulled the data straight from the matrix, is that ok?
+//		l_data = x.pData[0];
+//		r_data = x.pData[1];
+//		
+//		// centre the data: subtract the mean from each element
+//		float mean[1];
+//		mean[0]	= (l_data + r_data) / 2;
+//		arm_matrix_instance_f32 result;
+//		result.pData[0] = l_data - mean[0];
+//		result.pData[1] = r_data - mean[0];
+//		
+//		// TODO whiten the data:
+//			// result = (eigenvector matrix)*((diagonal matrix of eigenvalues)^(-1/2))*((eigenvector matrix)^T)*result
+//		
+//		// TODO find the mixing matrix with fastICA
+//		arm_matrix_instance_f32 a_found;
+//		
+//		// un-center the resulting matrix
+//		arm_matrix_instance_f32 s_mean;
+//		arm_matrix_instance_f32 mean_matrix = {1, 1, mean};
+//		arm_mat_inverse_f32(&a_found, &a_found);							// TODO make sure we don't need these A values anywhere
+//		arm_mat_mult_f32(&a_found, &mean_matrix, &s_mean);
+//		arm_mat_add_f32(&s_mean, &result, &result);
+//		
+//		// send result to DAC
+//			// TODO change DAC bits if necessary
+//		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, result.pData[0]);
+//		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, result.pData[1]);
+//		
+//		osMutexRelease(mutexID);
+//  }
+//  /* USER CODE END 5 */ 
+//}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
