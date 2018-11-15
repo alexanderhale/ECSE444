@@ -486,17 +486,12 @@ void OutputTask(void const * argument)
 			s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
 			s_2 = arm_sin_f32((2* PI * f_2 * i) / sampling_frequency);
 			
+			// provide a DC offset to signal
+				// the +1 shifts the sine wave to the range of 0 -> 2
 			// scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
-				// TODO figure out the logic behind this line? Not really sure why it's here
+				// range is 2^12 = 4096, so scale by 2048 bits
 			s_1 = (s_1 + 1) * 2048;
 			s_2 = (s_2 + 1) * 2048;
-			
-			// provide DC offset to signal
-				// lowest value you can write to the DAC is 0, whereas a sine wave has negative samples
-				// need to put centre of sine wave (i.e. sine_1[i] == 0) at the centre of the DAC range
-				// range is 2^12 = 4096, so shift up by 2048 bits
-			s_1 = s_1 + 2048;
-			s_2 = s_2 + 2048;
 			
 			// osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
 				// not needed till deliverable 2
