@@ -109,8 +109,8 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
   + ClockDivision = 0
   + Counter direction = Up
   */
-  htim17.Init.Period = (1000000 / 1000) - 1;
-  htim17.Init.Prescaler = uwPrescalerValue;
+  htim17.Init.Period = 450;//(1000000 / 1000) - 1;
+  htim17.Init.Prescaler = 10;//uwPrescalerValue;
   htim17.Init.ClockDivision = 0;
   htim17.Init.CounterMode = TIM_COUNTERMODE_UP;
   if(HAL_TIM_Base_Init(&htim17) == HAL_OK)

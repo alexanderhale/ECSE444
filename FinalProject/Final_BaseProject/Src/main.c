@@ -58,6 +58,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
+TIM_HandleTypeDef htim;
 
 DFSDM_Filter_HandleTypeDef hdfsdm1_filter0;
 DFSDM_Filter_HandleTypeDef hdfsdm1_filter1;
@@ -79,7 +80,8 @@ float f_1 = 261.63;			// C_4
 float f_2 = 392;				// G_4
 float32_t a_data[4] = {1, 2, 3, 4};				// TODO tweak these if necessary
 arm_matrix_instance_f32 a = {2, 2, a_data};
-arm_matrix_instance_f32 x;								// global for first deliverable
+float32_t x_data[2] = {0, 0};
+arm_matrix_instance_f32 x = {2, 1, x_data};								// global for first deliverable
 int sampling_frequency = 16000;
 /* USER CODE END PV */
 
@@ -89,6 +91,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_DFSDM1_Init(void);
 static void MX_DAC1_Init(void);
+//static void MX_TIM17_Init(void);
 void OutputTask(void const * argument);
 // void FastICATask(void const * argument);
 
@@ -174,6 +177,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_DFSDM1_Init();
   MX_DAC1_Init();
+	BSP_QSPI_Init();
   /* USER CODE BEGIN 2 */
 	HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
 	HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
@@ -294,7 +298,7 @@ void SystemClock_Config(void)
 
     /**Configure the Systick interrupt time 
     */
-  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/16000);
 
     /**Configure the Systick 
     */
@@ -437,6 +441,39 @@ static void MX_USART1_UART_Init(void)
 
 }
 
+/* TIM17 init function */
+//static void MX_TIM17_Init(void)
+//{
+
+//  TIM_ClockConfigTypeDef sClockSourceConfig;
+//  TIM_MasterConfigTypeDef sMasterConfig;
+
+//  htim.Instance = TIM17;
+//  htim.Init.Prescaler = 10;
+//  htim.Init.CounterMode = TIM_COUNTERMODE_UP;
+//  htim.Init.Period = 500;
+//  htim.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+//  htim.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+//  if (HAL_TIM_Base_Init(&htim) != HAL_OK)
+//  {
+//    _Error_Handler(__FILE__, __LINE__);
+//  }
+
+//  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+//  if (HAL_TIM_ConfigClockSource(&htim, &sClockSourceConfig) != HAL_OK)
+//  {
+//    _Error_Handler(__FILE__, __LINE__);
+//  }
+
+//  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+//  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+//  if (HAL_TIMEx_MasterConfigSynchronization(&htim, &sMasterConfig) != HAL_OK)
+//  {
+//    _Error_Handler(__FILE__, __LINE__);
+//  }
+
+//}
+
 /** Pinout Configuration
 */
 static void MX_GPIO_Init(void)
@@ -459,10 +496,21 @@ void OutputTask(void const * argument)
 
   /* USER CODE BEGIN 5 */
 	int i = 0;
-	int s_1;
-	int s_2;
+	float s_1;
+	float s_2;
 	
   /* Infinite loop */
+	char buffer[16];
+	
+	// scale a to maintain [0, 4096] range
+	for(int i=0; i<2; i+=2){
+		float scale = a.pData[i] + a.pData[i+1];
+		a.pData[i] /= scale;
+		a.pData[i+1] /= scale;
+	}
+	
+	
+
   for(;;)
   {
 		if (tim3_flag == 1) {
@@ -476,8 +524,8 @@ void OutputTask(void const * argument)
 				// the +1 shifts the sine wave to the range of 0 -> 2
 			// scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
 				// range is 2^12 = 4096, so scale by 2048 bits
-			s_1 = (s_1 + 1) * 2048;
-			s_2 = (s_2 + 1) * 2048;
+			s_1 = (s_1 + 1) * 2047;
+			s_2 = (s_2 + 1) * 2047;
 			
 			// osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
 				// not needed till deliverable 2
@@ -486,21 +534,32 @@ void OutputTask(void const * argument)
 			float32_t s_data[2];
 			s_data[0] = s_1;
 			s_data[1] = s_2;
-			arm_matrix_instance_f32 s_i = {1, 2, s_data};
+			arm_matrix_instance_f32 s_i = {2, 1, s_data};
 			arm_mat_mult_f32(&a, &s_i, &x);
 			
 			// send to DAC
 			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
 			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
 			
+			//sprintf(buffer, "%.2f\n", x.pData[0]);
+			//HAL_UART_Transmit(&huart1, (uint8_t *) buffer, strlen(buffer), 30000);
+			
 			i++;
-			if (i >= 32000) {
-				i = 0;
-			}
 			
 			// osMutexRelease(mutexID);		// not needed till deliverable 2
 		}
   }
+	
+	
+	while(1){
+		// write to qspi
+		BSP_QSPI_Write((uint8_t*)(&x.pData[0]), i*8, 32);
+		BSP_QSPI_Write((uint8_t*)(&x.pData[1]), i*8 + 4, 32);
+		
+		float left, right;
+		BSP_QSPI_Read((uint8_t*)&left, i*8, 32);
+		BSP_QSPI_Read((uint8_t*)&right, i*8 + 4, 32);
+	}
   /* USER CODE END 5 */ 
 }
 
