@@ -71,14 +71,9 @@ osThreadId fastICATaskHandle;
 
 osMutexId mutexID;						// ID for the mutex for the threads
 
-// TODO figure out if needed for deliverable 2?
-uint32_t  inputExec;						// argument for the timer call back function
-osTimerId inputTimer;					// id for the button timer
-
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-int tim3_flag = 0;
-int inputTimerExpiredFlag = 0;				// when 1, the next value can be output
+int tim3_flag = 0;								// when 1, the next value can be output			
 
 float f_1 = 261.63;			// C_4
 float f_2 = 392;				// G_4
@@ -115,10 +110,6 @@ int fgetc(FILE *f) {
   uint8_t ch = 0;
   while (HAL_OK != HAL_UART_Receive(&huart1, (uint8_t *)&ch, 1, 30000));
   return ch;
-}
-
-void InputTimer_Callback  (void const *arg) {		// timer callback function
-	inputTimerExpiredFlag = 1;
 }
 
 void GPIO_Init() {
@@ -204,17 +195,14 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
-  /* Create the thread(s) */
+  /* USER CODE BEGIN RTOS_THREADS */
+	/* Create the thread(s) */
   /* definition and creation of defaultTask */
   osThreadDef(outputTask, OutputTask, osPriorityNormal, 0, 128);
   outputTaskHandle = osThreadCreate(osThread(outputTask), NULL);
 	
 	// osThreadDef(fastICATask, FastICATask, osPriorityNormal, 0, 128);
   // fastICATaskHandle = osThreadCreate(osThread(fastICATask), NULL);
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  osTimerDef(Input, InputTimer_Callback);
-	inputTimer = osTimerCreate(osTimer(Input), osTimerPeriodic, &inputExec);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -474,13 +462,11 @@ void OutputTask(void const * argument)
 	int s_1;
 	int s_2;
 	
-	osTimerStart(inputTimer, 1/sampling_frequency);		// start the hold timer from x seconds (timeout period = sampling frequency)
-		// TODO figure out how to set the timeout lower than 1 ms (because 1/16000 < 1 ms)
   /* Infinite loop */
   for(;;)
   {
-		if (inputTimerExpiredFlag == 1) {
-			inputTimerExpiredFlag = 0;
+		if (tim3_flag == 1) {
+			tim3_flag = 0;
 			
 			// calculate sine wave values
 			s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
@@ -583,7 +569,7 @@ void OutputTask(void const * argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
+	tim3_flag = 1;
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM17) {
     HAL_IncTick();
