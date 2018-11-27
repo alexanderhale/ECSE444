@@ -67,11 +67,6 @@ DFSDM_Channel_HandleTypeDef hdfsdm1_channel2;
 
 UART_HandleTypeDef huart1;
 
-osThreadId outputTaskHandle;
-osThreadId fastICATaskHandle;
-
-osMutexId mutexID;						// ID for the mutex for the threads
-
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 int tim3_flag = 0;								// when 1, the next value can be output			
@@ -83,6 +78,18 @@ arm_matrix_instance_f32 a = {2, 2, a_data};
 float32_t x_data[2] = {0, 0};
 arm_matrix_instance_f32 x = {2, 1, x_data};								// global for first deliverable
 int sampling_frequency = 16000;
+
+// scale a to maintain [0, 4096] range
+for(int i=0; i<2; i+=2){
+  float scale = a.pData[i] + a.pData[i+1];
+  a.pData[i] /= scale;
+  a.pData[i+1] /= scale;
+}
+
+int time;
+int prevTime;
+float s_1;
+float s_2;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,7 +98,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_DFSDM1_Init(void);
 static void MX_DAC1_Init(void);
-//static void MX_TIM17_Init(void);
 void OutputTask(void const * argument);
 // void FastICATask(void const * argument);
 
@@ -113,6 +119,73 @@ int fgetc(FILE *f) {
   uint8_t ch = 0;
   while (HAL_OK != HAL_UART_Receive(&huart1, (uint8_t *)&ch, 1, 30000));
   return ch;
+}
+
+// generate and mix sine waves
+void sineGeneratorAndStore() { 
+  int i;
+  for (i = 0; i < 32000; i++) {
+      // calculate sine wave values
+      s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
+      s_2 = arm_sin_f32((2* PI * f_2 * i) / sampling_frequency);
+
+      // provide a DC offset to signal
+        // the +1 shifts the sine wave to the range of 0 -> 2
+      // scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
+        // range is 2^12 = 4096, so scale by 2048 bits
+      s_1 = (s_1 + 1) * 2047;
+      s_2 = (s_2 + 1) * 2047;
+
+      // calculate mixed values
+      float32_t s_data[2];
+      s_data[0] = s_1;
+      s_data[1] = s_2;
+      arm_matrix_instance_f32 s_i = {2, 1, s_data};
+      arm_mat_mult_f32(&a, &s_i, &x);
+
+      while (BSP_QSPI_GetStatus() == QSPI_BUSY || BSP_QSPI_GetStatus() == QSPI_ERROR) {
+        // wait for memory to be ready
+      }
+
+      // write to memory
+      BSP_QSPI_Write((uint8_t*)(&x.pData[0]), 0x00 + i * 0x4, 4);
+      BSP_QSPI_Write((uint8_t*)(&x.pData[1]), 0x1F400 + i * 0x4, 4);
+  }
+}
+
+// retrieve from QSPI memory
+void removeFromQSPI() {
+  time = 0;
+  prevTime = 0;
+
+  while (1) {
+    if (prevTime != time) {
+      while (BSP_QSPI_GetStatus() == QSPI_BUSY || BSP_QSPI_GetStatus() == QSPI_ERROR) {
+        // wait for memory to be ready
+      }
+
+      // read from memory
+      BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + time * 0x4, 4);
+      BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + time * 0x4, 4);
+
+      prevTime = time;
+    }
+
+    // when the timer has raised the flag
+    if (flag == 1) {
+      tim3_flag = 0;
+
+      time ++;
+      if (time > 31999) {
+        time = 0;
+      }
+
+      // send the mixed value to the DAC
+        // TODO change this to implement BSS via FastICA
+      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
+      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
+    }
+  }
 }
 
 void GPIO_Init() {
@@ -175,52 +248,21 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-  MX_DFSDM1_Init();
   MX_DAC1_Init();
 	BSP_QSPI_Init();
   /* USER CODE BEGIN 2 */
 	HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
 	HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
-	
-	HAL_DFSDM_FilterRegularStart(&hdfsdm1_filter0);					// start the filters
-	HAL_DFSDM_FilterRegularStart(&hdfsdm1_filter1);
   /* USER CODE END 2 */
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  osMutexDef(Mutex1);
-	mutexID = osMutexCreate(osMutex(Mutex1));
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_THREADS */
-	/* Create the thread(s) */
-  /* definition and creation of defaultTask */
-  osThreadDef(outputTask, OutputTask, osPriorityNormal, 0, 128);
-  outputTaskHandle = osThreadCreate(osThread(outputTask), NULL);
-	
-	// osThreadDef(fastICATask, FastICATask, osPriorityNormal, 0, 128);
-  // fastICATaskHandle = osThreadCreate(osThread(fastICATask), NULL);
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Start scheduler */
-  osKernelStart();
   
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	
+
+  sineGeneratorAndStore();
+  removeFromQSPI();
+
 	while (1)
   {
   /* USER CODE END WHILE */
@@ -344,82 +386,6 @@ static void MX_DAC1_Init(void)
 
 }
 
-/* DFSDM1 init function */
-static void MX_DFSDM1_Init(void)
-{
-
-  hdfsdm1_filter0.Instance = DFSDM1_Filter0;
-  hdfsdm1_filter0.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
-  hdfsdm1_filter0.Init.RegularParam.FastMode = ENABLE;
-  hdfsdm1_filter0.Init.RegularParam.DmaMode = DISABLE;
-  hdfsdm1_filter0.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC4_ORDER;
-  hdfsdm1_filter0.Init.FilterParam.Oversampling = 128;
-  hdfsdm1_filter0.Init.FilterParam.IntOversampling = 1;
-  if (HAL_DFSDM_FilterInit(&hdfsdm1_filter0) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  hdfsdm1_filter1.Instance = DFSDM1_Filter1;
-  hdfsdm1_filter1.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
-  hdfsdm1_filter1.Init.RegularParam.FastMode = ENABLE;
-  hdfsdm1_filter1.Init.RegularParam.DmaMode = DISABLE;
-  hdfsdm1_filter1.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC4_ORDER;
-  hdfsdm1_filter1.Init.FilterParam.Oversampling = 128;
-  hdfsdm1_filter1.Init.FilterParam.IntOversampling = 1;
-  if (HAL_DFSDM_FilterInit(&hdfsdm1_filter1) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  hdfsdm1_channel1.Instance = DFSDM1_Channel1;
-  hdfsdm1_channel1.Init.OutputClock.Activation = ENABLE;
-  hdfsdm1_channel1.Init.OutputClock.Selection = DFSDM_CHANNEL_OUTPUT_CLOCK_AUDIO;
-  hdfsdm1_channel1.Init.OutputClock.Divider = 32;
-  hdfsdm1_channel1.Init.Input.Multiplexer = DFSDM_CHANNEL_EXTERNAL_INPUTS;
-  hdfsdm1_channel1.Init.Input.DataPacking = DFSDM_CHANNEL_STANDARD_MODE;
-  hdfsdm1_channel1.Init.Input.Pins = DFSDM_CHANNEL_FOLLOWING_CHANNEL_PINS;
-  hdfsdm1_channel1.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_FALLING;
-  hdfsdm1_channel1.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
-  hdfsdm1_channel1.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
-  hdfsdm1_channel1.Init.Awd.Oversampling = 1;
-  hdfsdm1_channel1.Init.Offset = -1152;
-  hdfsdm1_channel1.Init.RightBitShift = 0x0D;
-  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel1) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  hdfsdm1_channel2.Instance = DFSDM1_Channel2;
-  hdfsdm1_channel2.Init.OutputClock.Activation = ENABLE;
-  hdfsdm1_channel2.Init.OutputClock.Selection = DFSDM_CHANNEL_OUTPUT_CLOCK_AUDIO;
-  hdfsdm1_channel2.Init.OutputClock.Divider = 32;
-  hdfsdm1_channel2.Init.Input.Multiplexer = DFSDM_CHANNEL_EXTERNAL_INPUTS;
-  hdfsdm1_channel2.Init.Input.DataPacking = DFSDM_CHANNEL_STANDARD_MODE;
-  hdfsdm1_channel2.Init.Input.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS;
-  hdfsdm1_channel2.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_RISING;
-  hdfsdm1_channel2.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
-  hdfsdm1_channel2.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
-  hdfsdm1_channel2.Init.Awd.Oversampling = 1;
-  hdfsdm1_channel2.Init.Offset = -1152;
-  hdfsdm1_channel2.Init.RightBitShift = 0x0D;
-  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel2) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  if (HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter0, DFSDM_CHANNEL_1, DFSDM_CONTINUOUS_CONV_ON) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  if (HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter1, DFSDM_CHANNEL_2, DFSDM_CONTINUOUS_CONV_ON) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
 /* USART1 init function */
 static void MX_USART1_UART_Init(void)
 {
@@ -441,39 +407,6 @@ static void MX_USART1_UART_Init(void)
 
 }
 
-/* TIM17 init function */
-//static void MX_TIM17_Init(void)
-//{
-
-//  TIM_ClockConfigTypeDef sClockSourceConfig;
-//  TIM_MasterConfigTypeDef sMasterConfig;
-
-//  htim.Instance = TIM17;
-//  htim.Init.Prescaler = 10;
-//  htim.Init.CounterMode = TIM_COUNTERMODE_UP;
-//  htim.Init.Period = 500;
-//  htim.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-//  htim.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-//  if (HAL_TIM_Base_Init(&htim) != HAL_OK)
-//  {
-//    _Error_Handler(__FILE__, __LINE__);
-//  }
-
-//  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-//  if (HAL_TIM_ConfigClockSource(&htim, &sClockSourceConfig) != HAL_OK)
-//  {
-//    _Error_Handler(__FILE__, __LINE__);
-//  }
-
-//  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-//  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-//  if (HAL_TIMEx_MasterConfigSynchronization(&htim, &sMasterConfig) != HAL_OK)
-//  {
-//    _Error_Handler(__FILE__, __LINE__);
-//  }
-
-//}
-
 /** Pinout Configuration
 */
 static void MX_GPIO_Init(void)
@@ -489,133 +422,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
-
-/* OutputTask function */
-void OutputTask(void const * argument)
-{
-
-  /* USER CODE BEGIN 5 */
-	int i = 0;
-	float s_1;
-	float s_2;
-	
-  /* Infinite loop */
-	char buffer[16];
-	
-	// scale a to maintain [0, 4096] range
-	for(int i=0; i<2; i+=2){
-		float scale = a.pData[i] + a.pData[i+1];
-		a.pData[i] /= scale;
-		a.pData[i+1] /= scale;
-	}
-	
-	
-
-  for(;;)
-  {
-		if (tim3_flag == 1) {
-			tim3_flag = 0;
-			
-			// calculate sine wave values
-			s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
-			s_2 = arm_sin_f32((2* PI * f_2 * i) / sampling_frequency);
-			
-			// provide a DC offset to signal
-				// the +1 shifts the sine wave to the range of 0 -> 2
-			// scale the signal to have a suitable amplitude for the DAC resolution (8 or 12 bits)
-				// range is 2^12 = 4096, so scale by 2048 bits
-			s_1 = (s_1 + 1) * 2047;
-			s_2 = (s_2 + 1) * 2047;
-			
-			// osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
-				// not needed till deliverable 2
-			
-			// calculate mixed values
-			float32_t s_data[2];
-			s_data[0] = s_1;
-			s_data[1] = s_2;
-			arm_matrix_instance_f32 s_i = {2, 1, s_data};
-			arm_mat_mult_f32(&a, &s_i, &x);
-			
-			// send to DAC
-			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
-			HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
-			
-			//sprintf(buffer, "%.2f\n", x.pData[0]);
-			//HAL_UART_Transmit(&huart1, (uint8_t *) buffer, strlen(buffer), 30000);
-			
-			i++;
-			
-			// osMutexRelease(mutexID);		// not needed till deliverable 2
-		}
-  }
-	
-	
-	while(1){
-		// write to qspi
-		BSP_QSPI_Write((uint8_t*)(&x.pData[0]), i*8, 32);
-		BSP_QSPI_Write((uint8_t*)(&x.pData[1]), i*8 + 4, 32);
-		
-		float left, right;
-		BSP_QSPI_Read((uint8_t*)&left, i*8, 32);
-		BSP_QSPI_Read((uint8_t*)&right, i*8 + 4, 32);
-	}
-  /* USER CODE END 5 */ 
-}
-
-/* FastICATask function */
-		// this will only be required for the second deliverable (I think)
-//void FastICATask(void const * argument)
-//{
-//  /* USER CODE BEGIN 5 */
-//	
-//  /* Infinite loop */
-//  for(;;)
-//  {
-//		osMutexWait(mutexID, osWaitForever);								// hold mutex so printing doesn't get interrupted
-//		
-//		// TODO get the data
-//			// the data will come from the microphones for the second demo
-//		/*while (HAL_DFSDM_FilterPollForRegConversion(&hdfsdm1_filter0, 30000) != HAL_OK) {
-//				// TODO replace this inefficient polling with interrupts
-//		}
-//		l_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &l_channel);
-//		r_data = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &r_channel); */
-//		
-//		// for the first demo, get the data from the DAC pins using an ADC
-//			// TODO here I just pulled the data straight from the matrix, is that ok?
-//		l_data = x.pData[0];
-//		r_data = x.pData[1];
-//		
-//		// centre the data: subtract the mean from each element
-//		float mean[1];
-//		mean[0]	= (l_data + r_data) / 2;
-//		arm_matrix_instance_f32 result;
-//		result.pData[0] = l_data - mean[0];
-//		result.pData[1] = r_data - mean[0];
-//		
-//		// TODO whiten the data:
-//			// result = (eigenvector matrix)*((diagonal matrix of eigenvalues)^(-1/2))*((eigenvector matrix)^T)*result
-//		
-//		// TODO find the mixing matrix with fastICA
-//		arm_matrix_instance_f32 a_found;
-//		
-//		// un-center the resulting matrix
-//		arm_matrix_instance_f32 s_mean;
-//		arm_matrix_instance_f32 mean_matrix = {1, 1, mean};
-//		arm_mat_inverse_f32(&a_found, &a_found);							// TODO make sure we don't need these A values anywhere
-//		arm_mat_mult_f32(&a_found, &mean_matrix, &s_mean);
-//		arm_mat_add_f32(&s_mean, &result, &result);
-//		
-//		// send result to DAC
-//			// TODO change DAC bits if necessary
-//		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, result.pData[0]);
-//		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, result.pData[1]);
-//		
-//		osMutexRelease(mutexID);
-//  }
-//  /* USER CODE END 5 */ 
-//}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
