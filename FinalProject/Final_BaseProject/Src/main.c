@@ -79,13 +79,6 @@ float32_t x_data[2] = {0, 0};
 arm_matrix_instance_f32 x = {2, 1, x_data};								// global for first deliverable
 int sampling_frequency = 16000;
 
-// scale a to maintain [0, 4096] range
-for(int i=0; i<2; i+=2){
-  float scale = a.pData[i] + a.pData[i+1];
-  a.pData[i] /= scale;
-  a.pData[i+1] /= scale;
-}
-
 int time;
 int prevTime;
 float s_1;
@@ -123,7 +116,15 @@ int fgetc(FILE *f) {
 
 // generate and mix sine waves
 void sineGeneratorAndStore() { 
-  int i;
+	// scale a to maintain [0, 4096] range
+	int i;
+	for (i=0; i<2; i+=2){
+		float scale = a.pData[0] + a.pData[1];
+		a.pData[0] /= scale;
+		a.pData[1] /= scale;
+	}
+	
+	// generate 2 seconds (16000 signals per second) of sine wave
   for (i = 0; i < 32000; i++) {
       // calculate sine wave values
       s_1 = arm_sin_f32((2 * PI * f_1 * i) / sampling_frequency);
@@ -155,11 +156,12 @@ void sineGeneratorAndStore() {
 
 // retrieve from QSPI memory
 void removeFromQSPI() {
-  time = 0;
-  prevTime = 0;
+  index = 0;
 
   while (1) {
-    if (prevTime != time) {
+    // if the tim
+    if (tim3_flag == 1) {
+
       while (BSP_QSPI_GetStatus() == QSPI_BUSY || BSP_QSPI_GetStatus() == QSPI_ERROR) {
         // wait for memory to be ready
       }
@@ -168,20 +170,26 @@ void removeFromQSPI() {
       BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + time * 0x4, 4);
       BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + time * 0x4, 4);
 
-      prevTime = time;
-    }
+      // TODO check whether we need to wait for a bit here for the read to finish
 
-    // when the timer has raised the flag
-    if (tim3_flag == 1) {
+      // put the incrementing logic here since we might have to be waiting anyway
       tim3_flag = 0;
-
-      time ++;
-      if (time > 31999) {
-        time = 0;
+      index++;
+      if (index > 31999) {
+        index = 0;
       }
 
+      // perform fastICA by calling Matlab code from C
+        // send the values of x over UART
+        // wait a bit
+        // receive the unmixed values of x from UART
+        // TODO
+
+      // send the separated value to the DAC
+        // TODO
+
       // send the mixed value to the DAC
-        // TODO change this to implement BSS via FastICA
+        // TODO remove once the separated values can be sent
       HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
       HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
     }

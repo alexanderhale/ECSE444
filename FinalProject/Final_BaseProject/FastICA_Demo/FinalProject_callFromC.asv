@@ -1,0 +1,51 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Receiving data
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Performing FastICA
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+[u, A_est, W] = fastica(x);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% OPTIONALLY, figure out how to transform the extimate to the original
+% YOU CANNOT DO THIS IF YOU DID NOT KNOW WHAT THE ORIGINAL 'A' WAS !!!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+swap_transform = [[0,1];[1,0]];
+t1 = A./A_est;
+t2 = A./(A_est*swap_transform);
+t3 = A./(swap_transform*A_est);
+
+x_t1 = t1-t1(1,1);
+x_t2 = t2-t2(1,1);
+x_t3 = t3-t3(1,1);
+
+dets = [abs(det(x_t1)), abs(det(x_t2)), abs(det(x_t3))];
+[min,idx] = min([abs(det(x_t1)), abs(det(x_t2)), abs(det(x_t3))]);
+
+if(idx == 1)
+   % display(...
+   % sprintf('The estimated matrix has been scaled by a factor of %.2f', ...
+   % abs(mean2(t1))));
+   abs(mean2(t1));
+   A_est_fixed = A_est.*t1;
+elseif(idx == 2)
+   % display('The columns of the estimated matrix have been swapped and');
+   display(...
+   sprintf('the estimated matrix has been scaled by a factor of %.2f', ...
+   abs(mean2(t2))));
+   A_est_fixed = A_est*swap_transform.*t2;
+elseif(idx == 3)
+   display('The rows of the estimated matrix have been swapped and');
+   display(...
+   sprintf('the estimated matrix has been scaled by a factor of %.2f', ...
+   abs(mean2(t3))));
+   A_est_fixed = swap_transform*A_est.*t2;
+end
+
+display('Fixed estimated mixing matrix: ');
+display(A_est_fixed);
+
+display('NOTE: Not reporting whether the sign of the mixing columns have');
+display('been flipped, this is left for you to figure out as an exercise');
