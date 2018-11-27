@@ -172,7 +172,7 @@ void removeFromQSPI() {
     }
 
     // when the timer has raised the flag
-    if (flag == 1) {
+    if (tim3_flag == 1) {
       tim3_flag = 0;
 
       time ++;
