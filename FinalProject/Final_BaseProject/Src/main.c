@@ -119,9 +119,9 @@ void sineGeneratorAndStore() {
 	// scale a to maintain [0, 4096] range
 	int i;
 	for (i=0; i<2; i+=2){
-		float scale = a.pData[0] + a.pData[1];
-		a.pData[0] /= scale;
-		a.pData[1] /= scale;
+		float scale = a.pData[i] + a.pData[i + 1];
+		a.pData[i]     /= scale;
+		a.pData[i + 1] /= scale;
 	}
 	
 	// generate 2 seconds (16000 signals per second) of sine wave
@@ -147,16 +147,21 @@ void sineGeneratorAndStore() {
       while (BSP_QSPI_GetStatus() == QSPI_BUSY || BSP_QSPI_GetStatus() == QSPI_ERROR) {
         // wait for memory to be ready
       }
+			
 
       // write to memory
       BSP_QSPI_Write((uint8_t*)(&x.pData[0]), 0x00 + i * 0x4, 4);
       BSP_QSPI_Write((uint8_t*)(&x.pData[1]), 0x1F400 + i * 0x4, 4);
+			
+			//char buffer[120];
+			//sprintf(buffer, "%.2f\n", x.pData[0]);
+			//HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000);
   }
 }
 
 // retrieve from QSPI memory
 void removeFromQSPI() {
-  index = 0;
+  int index = 0;
 
   while (1) {
     // if the tim
@@ -167,8 +172,14 @@ void removeFromQSPI() {
       }
 
       // read from memory
-      BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + time * 0x4, 4);
-      BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + time * 0x4, 4);
+      BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + index * 0x4, 4);
+      BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + index * 0x4, 4);
+			
+			//char buffer[120];
+			//sprintf(buffer, "%.2f\n", x.pData[0]);
+			
+			//HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000);
+			
 
       // TODO check whether we need to wait for a bit here for the read to finish
 
@@ -267,7 +278,14 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
+	
+	int status = 0;
+	for(int i=0; i<256; i++) {
+		if(BSP_QSPI_Erase_Sector(i) == QSPI_ERROR) {
+			status = -1;
+		}
+	}
+	
   sineGeneratorAndStore();
   removeFromQSPI();
 
