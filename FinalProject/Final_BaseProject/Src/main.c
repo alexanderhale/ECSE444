@@ -234,15 +234,25 @@ void qspiToDac(){
 void uartToQspi(){
 	clearQspi();
 	
-	float buffer1[100];
-	float buffer2[100];
-	for(int i=0; i<16; i++){
-		HAL_UART_Receive(&huart1, (uint8_t *)buffer1, 400, 30000);
-		HAL_UART_Receive(&huart1, (uint8_t *)buffer2, 400, 30000);
+//	float buffer1[100];
+//	float buffer2[100];
+//	for(int i=0; i<16; i++){
+//		HAL_UART_Receive(&huart1, (uint8_t *)buffer1, 400, 30000);
+//		HAL_UART_Receive(&huart1, (uint8_t *)buffer2, 400, 30000);
+//		
+//		// write to memory
+//		BSP_QSPI_Write((uint8_t*)buffer1, 0x00 + i * 0x400, 400);
+//		BSP_QSPI_Write((uint8_t*)buffer2, 0x1F400 + i * 0x400, 400);
+//	}
+	
+	float buffer1, buffer2;
+	for(int i=0; i<30000; i++){
+		HAL_UART_Receive(&huart1, (uint8_t *)(&buffer1), 4, 30000);
+		HAL_UART_Receive(&huart1, (uint8_t *)(&buffer2), 4, 30000);
 		
 		// write to memory
-		BSP_QSPI_Write((uint8_t*)buffer1, 0x00 + i * 0x400, 400);
-		BSP_QSPI_Write((uint8_t*)buffer2, 0x1F400 + i * 0x400, 400);
+		BSP_QSPI_Write((uint8_t*)(&buffer1), 0x00 + i * 0x4, 4);
+		BSP_QSPI_Write((uint8_t*)(&buffer2), 0x1F400 + i * 0x4, 4);
 	}
 }
 
@@ -339,10 +349,21 @@ int main(void)
 	// wait
 	
 	// receive from matlab
-	//uartToQspi();
+	uartToQspi();
+	
+	
+//	for(int i=0; i<100; i++){
+//			float buffer1;
+//			//float buffer2;
+//      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x4, 4);
+//      //BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x4, 4);
+//			while(HAL_UART_Transmit(&huart1, (uint8_t *) (&buffer1), 4, 30000) != HAL_OK){}
+//			//while(HAL_UART_Transmit(&huart1, (uint8_t *) (&buffer2), 4, 30000) != HAL_OK){}
+//		
+//	}
 	
 	// display
-	//qspiToDac();
+	qspiToDac();
 	
 	
 
