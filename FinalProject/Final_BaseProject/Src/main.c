@@ -92,6 +92,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_DFSDM1_Init(void);
 static void MX_DAC1_Init(void);
 void OutputTask(void const * argument);
+void fastICA();
 // void FastICATask(void const * argument);
 
 int32_t l_data, r_data;
@@ -114,8 +115,22 @@ int fgetc(FILE *f) {
   return ch;
 }
 
+
+int clearQspi(){
+	int status = 0;
+	for(int i=0; i<256; i++) {
+		if(BSP_QSPI_Erase_Sector(i) == QSPI_ERROR) {
+			status = -1;
+		}
+	}
+	return status;
+}
+
+
 // generate and mix sine waves
-void sineGeneratorAndStore() { 
+void sineToQspi() {
+	clearQspi();
+	
 	// scale a to maintain [0, 4096] range
 	int i;
 	for (i=0; i<2; i+=2){
@@ -160,52 +175,81 @@ void sineGeneratorAndStore() {
 }
 
 // retrieve from QSPI memory
-void removeFromQSPI() {
-  int index = 0;
+void qspiToUart() {
 
-  while (1) {
+  for (int i=0; i<320; i++) {
     // if the tim
     if (tim3_flag == 1) {
+      tim3_flag = 0;
 
       while (BSP_QSPI_GetStatus() == QSPI_BUSY || BSP_QSPI_GetStatus() == QSPI_ERROR) {
         // wait for memory to be ready
       }
+			
+			float buffer1[100];
+			float buffer2[100];
+      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x400, 400);
+      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x400, 400);
+			
+			// send over uart
+			HAL_UART_Transmit(&huart1, (uint8_t *) buffer1, 400, 30000);
+			HAL_UART_Transmit(&huart1, (uint8_t *) buffer2, 400, 30000);
 
       // read from memory
-      BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + index * 0x4, 4);
-      BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + index * 0x4, 4);
-			
-			//char buffer[120];
-			//sprintf(buffer, "%.2f\n", x.pData[0]);
-			
-			//HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000);
-			
-
-      // TODO check whether we need to wait for a bit here for the read to finish
-
-      // put the incrementing logic here since we might have to be waiting anyway
-      tim3_flag = 0;
-      index++;
-      if (index > 31999) {
-        index = 0;
-      }
-
-      // perform fastICA by calling Matlab code from C
-        // send the values of x over UART
-        // wait a bit
-        // receive the unmixed values of x from UART
-        // TODO
-
-      // send the separated value to the DAC
-        // TODO
-
-      // send the mixed value to the DAC
-        // TODO remove once the separated values can be sent
-      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
-      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
+//			float buffer1;
+//			float buffer2;
+//      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x4, 4);
+//      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x4, 4);
+//			
+//			char buffer[120];
+//			sprintf(buffer, "%i %.2f\n", i,  buffer1);
+//			while(HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000) != HAL_OK){}
     }
   }
 }
+
+
+void qspiToDac(){
+	int i = 0;
+	while(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET){
+			
+    if (tim3_flag == 1) {
+      tim3_flag = 0;
+			BSP_QSPI_Read((uint8_t*)(&x.pData[0]), 0x00 + i * 0x4, 4);
+			BSP_QSPI_Read((uint8_t*)(&x.pData[1]), 0x1F400 + i * 0x4, 4);
+			
+      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, x.pData[0]);
+      HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, x.pData[1]);
+			
+			i++;
+			i %= 32000;
+		}
+	}
+}
+
+
+
+void uartToQspi(){
+	clearQspi();
+	
+	float buffer1[100];
+	float buffer2[100];
+	for(int i=0; i<16; i++){
+		HAL_UART_Receive(&huart1, (uint8_t *)buffer1, 400, 30000);
+		HAL_UART_Receive(&huart1, (uint8_t *)buffer2, 400, 30000);
+		
+		// write to memory
+		BSP_QSPI_Write((uint8_t*)buffer1, 0x00 + i * 0x400, 400);
+		BSP_QSPI_Write((uint8_t*)buffer2, 0x1F400 + i * 0x400, 400);
+	}
+}
+
+
+
+
+
+
+
 
 void GPIO_Init() {
 	/** Pinout Configuration
@@ -278,16 +322,27 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+
+
+	// generate sine wave
+  sineToQspi();
 	
-	int status = 0;
-	for(int i=0; i<256; i++) {
-		if(BSP_QSPI_Erase_Sector(i) == QSPI_ERROR) {
-			status = -1;
-		}
-	}
+	// display
+	qspiToDac();
 	
-  sineGeneratorAndStore();
-  removeFromQSPI();
+	// send to matlab
+  qspiToUart();
+	
+	// wait
+	
+	// receive from matlab
+	//uartToQspi();
+	
+	// display
+	//qspiToDac();
+	
+	
 
 	while (1)
   {
@@ -439,11 +494,39 @@ static void MX_GPIO_Init(void)
 {
 
   /* GPIO Ports Clock Enable */
+  //__HAL_RCC_GPIOA_CLK_ENABLE();
+  //__HAL_RCC_GPIOE_CLK_ENABLE();
+  //__HAL_RCC_GPIOB_CLK_ENABLE();
+	
+	/** Pinout Configuration
+*/
+	GPIO_InitTypeDef GPIO_InitStruct;
+	
+  /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE();
+	
+	/*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
+
+
 
 /* USER CODE BEGIN 4 */
 
