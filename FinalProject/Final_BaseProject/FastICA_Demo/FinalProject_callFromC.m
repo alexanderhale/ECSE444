@@ -1,21 +1,32 @@
+clear;
+clc;
+
+% try to fix the port situation
+if ~isempty(instrfind)
+    fclose(instrfind);
+    delete(instrfind);
+end
+
+s = serial('COM5');
+set(s,'BaudRate',115200);
+set(s,'InputBufferSize',32000*32);
+fopen(s);
+    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Receiving data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-s = serial('COM5');
-set(s,'BaudRate',16000);
-fopen(s);
-in = fscan(s);
+%in = fscan(s);
+in = fread(s, 32000, 'int');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Performing FastICA
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-[u, A_est, W] = fastica(x);
+[u, A_est, W] = fastica(in);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Sending Data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% TODO figure out what '*IDN?' is, and whether u is the right variable
-fprintf(u,'*IDN?')
-fclose(s)
-delete(s)
+fprintf(u,'*IDN');
+fclose(s);
+delete(s);
 clear s
