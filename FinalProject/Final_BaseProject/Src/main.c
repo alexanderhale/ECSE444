@@ -177,7 +177,7 @@ void sineToQspi() {
 // retrieve from QSPI memory
 void qspiToUart() {
 
-  for (int i=0; i<320; i++) {
+  for (int i=0; i<32000; i++) {
     // if the tim
     if (tim3_flag == 1) {
       tim3_flag = 0;
@@ -186,24 +186,26 @@ void qspiToUart() {
         // wait for memory to be ready
       }
 			
-			float buffer1[100];
-			float buffer2[100];
-      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x400, 400);
-      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x400, 400);
-			
-			// send over uart
-			HAL_UART_Transmit(&huart1, (uint8_t *) buffer1, 400, 30000);
-			HAL_UART_Transmit(&huart1, (uint8_t *) buffer2, 400, 30000);
+//			float buffer1[100];
+//			float buffer2[100];
+//      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x400, 400);
+//      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x400, 400);
+//			
+//			// send over uart
+//			HAL_UART_Transmit(&huart1, (uint8_t *) buffer1, 400, 30000);
+//			HAL_UART_Transmit(&huart1, (uint8_t *) buffer2, 400, 30000);
 
       // read from memory
-//			float buffer1;
-//			float buffer2;
-//      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x4, 4);
-//      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x4, 4);
-//			
-//			char buffer[120];
-//			sprintf(buffer, "%i %.2f\n", i,  buffer1);
-//			while(HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000) != HAL_OK){}
+			float buffer1;
+			float buffer2;
+      BSP_QSPI_Read((uint8_t*)(&buffer1), 0x00 + i * 0x4, 4);
+      BSP_QSPI_Read((uint8_t*)(&buffer2), 0x1F400 + i * 0x4, 4);
+			while(HAL_UART_Transmit(&huart1, (uint8_t *) (&buffer1), 4, 30000) != HAL_OK){}
+			while(HAL_UART_Transmit(&huart1, (uint8_t *) (&buffer2), 4, 30000) != HAL_OK){}
+			
+			//char buffer[120];
+			//sprintf(buffer, "%i %.2f\n", i,  buffer1);
+			//while(HAL_UART_Transmit(&huart1, (uint8_t *) &buffer, strlen(buffer), 30000) != HAL_OK){}
     }
   }
 }
